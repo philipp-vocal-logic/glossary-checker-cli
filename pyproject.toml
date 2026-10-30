@@ -13,6 +13,9 @@ dependencies = [
     "pathspec>=0.12.1",
 ]
 
+[project.urls]
+Repository = "https://github.com/philipp-vocal-logic/glossary-checker-cli"
+
 [project.scripts]
 glossary = "glossary_checker_cli.cli:main"
 
@@ -26,8 +29,8 @@ dev = [
 ]
 
 [tool.uv.sources]
-archcheck = { path = "../architecture-checker-cli", editable = true }
-symbol-checker-cli = { path = "../symbol-checker-cli", editable = true }
+archcheck = { git = "https://github.com/philipp-vocal-logic/architecture-checker-cli.git", branch = "main" }
+symbol-checker-cli = { git = "https://github.com/philipp-vocal-logic/symbol-checker-cli.git", branch = "main" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

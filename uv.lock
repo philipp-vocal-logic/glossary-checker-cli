@@ -5,17 +5,7 @@ requires-python = ">=3.12"
 [[package]]
 name = "archcheck"
 version = "0.1.0"
-source = { editable = "../architecture-checker-cli" }
-
-[package.metadata]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "glossary-checker-cli", editable = "." },
-    { name = "pytest", specifier = ">=8.0" },
-    { name = "ruff", specifier = ">=0.5" },
-    { name = "symbol-checker-cli", editable = "../symbol-checker-cli" },
-]
+source = { git = "https://github.com/philipp-vocal-logic/architecture-checker-cli.git?branch=main#75293f8d8fd04b9d20edddce06b7140acf4cf8b4" }
 
 [[package]]
 name = "colorama"
@@ -159,11 +149,11 @@ requires-dist = [{ name = "pathspec", specifier = ">=0.12.1" }]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "archcheck", editable = "../architecture-checker-cli" },
+    { name = "archcheck", git = "https://github.com/philipp-vocal-logic/architecture-checker-cli.git?branch=main" },
     { name = "pytest", specifier = ">=8.0.0" },
     { name = "pytest-cov", specifier = ">=7.1.0" },
     { name = "ruff", specifier = ">=0.8.0" },
-    { name = "symbol-checker-cli", editable = "../symbol-checker-cli" },
+    { name = "symbol-checker-cli", git = "https://github.com/philipp-vocal-logic/symbol-checker-cli.git?branch=main" },
 ]
 
 [[package]]
@@ -269,18 +259,7 @@ wheels = [
 [[package]]
 name = "symbol-checker-cli"
 version = "0.1.0"
-source = { editable = "../symbol-checker-cli" }
+source = { git = "https://github.com/philipp-vocal-logic/symbol-checker-cli.git?branch=main#e35cd9e38ec1ab82b37f4f5386eda56b0dc62d05" }
 dependencies = [
     { name = "pathspec" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "pathspec", specifier = ">=0.12.1" }]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "archcheck", editable = "../architecture-checker-cli" },
-    { name = "glossary-checker-cli", editable = "." },
-    { name = "pytest", specifier = ">=8.0.0" },
-    { name = "ruff", specifier = ">=0.8.0" },
 ]
