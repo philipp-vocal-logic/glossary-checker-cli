@@ -8,9 +8,13 @@ from pathlib import Path
 
 _UPPER = r"[A-ZÀ-ÖØ-Þ]"
 _LOWER = r"[a-zß-öø-ÿ]"
-SUBWORD_PATTERN = re.compile(rf"{_UPPER}+(?={_UPPER}{_LOWER}|\d|_|\b)|{_UPPER}?{_LOWER}+|\d+")
+SUBWORD_PATTERN = re.compile(
+    rf"{_UPPER}{{2,}}s(?={_UPPER}{_LOWER}|\d|_|\b)"
+    rf"|{_UPPER}+(?={_UPPER}{_LOWER}|\d|_|\b)"
+    rf"|{_UPPER}?{_LOWER}+|\d+"
+)
 INVARIANT_SINGULARS = frozenset(
-    {"alias", "atlas", "canvas", "chaos", "corpus", "lens", "news", "series", "species"}
+    {"alias", "atlas", "bias", "canvas", "chaos", "corpus", "lens", "news", "series", "species"}
 )
 
 

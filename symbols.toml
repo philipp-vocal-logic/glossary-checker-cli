@@ -16,62 +16,16 @@ forbidden_subwords = [
     "misc",
 ]
 
-[[terms]]
-term = "load"
-definition = "Read and deserialize a glossary configuration from a filesystem path."
-forbidden_terms = ["fetch", "retrieve", "obtain", "read_config"]
-
-[[terms]]
-term = "validate"
-definition = "Verify an in-memory glossary object for internal consistency and non-ambiguity."
-forbidden_terms = ["assert_valid", "ensure_glossary"]
-
-[[terms]]
-term = "extract"
-definition = "Decompose a source line into typed subword spans."
-forbidden_terms = ["scrape", "harvest", "mine", "collect_tokens"]
-
-[[terms]]
-term = "check"
-definition = "Evaluate target_files or glossary entries against rules to produce findings."
-forbidden_terms = ["lint", "scan", "analyze", "inspect", "audit"]
-
-[[terms]]
-term = "split"
-definition = "Decompose a compound identifier or phrase string into normalized lowercase subwords."
-forbidden_terms = ["tokenize", "segment", "chop", "explode"]
-
-[[terms]]
-term = "normalize"
-definition = "Convert a subword sequence into its canonical lowercase singular form."
-forbidden_terms = ["canonicalize", "standardize", "sanitize"]
-
-[[terms]]
-term = "format"
-definition = "Produce a deterministic text representation of a finding."
-forbidden_terms = ["render", "prettify", "stringify"]
-
-[[terms]]
-term = "build"
-definition = "Assemble a composite matcher or rule structure from configuration inputs."
-forbidden_terms = ["construct", "make_object", "create_spec"]
-
-[[terms]]
-term = "discover"
-definition = "Walk directory hierarchies to find non-ignored target_files."
-forbidden_terms = ["find_files", "locate_files", "crawl"]
-
-[[terms]]
-term = "matcher"
-definition = "A compiled pathspec rule structure used to test whether a file path is ignored."
-forbidden_terms = ["spec", "filter_obj", "path_rule"]
-
-[[terms]]
-term = "index"
-definition = "Zero-based integer offset within an ordered sequence."
-forbidden_terms = ["idx", "pos"]
-
-[[terms]]
-term = "error"
-definition = "An exception or failure condition encountered during parsing or file reading."
-forbidden_terms = ["err", "exc"]
+[replacements]
+load = ["fetch", "retrieve", "obtain", "read_config"]
+validate = ["assert_valid", "ensure_glossary"]
+extract = ["scrape", "harvest", "mine", "collect_tokens"]
+check = ["lint", "scan", "analyze", "inspect", "audit"]
+split = ["tokenize", "segment", "chop", "explode"]
+normalize = ["canonicalize", "standardize", "sanitize"]
+format = ["render", "prettify", "stringify"]
+build = ["construct", "make_object", "create_spec"]
+discover = ["find_files", "locate_files", "crawl"]
+matcher = ["spec", "filter_obj", "path_rule"]
+index = ["idx", "pos"]
+error = ["err", "exc"]
