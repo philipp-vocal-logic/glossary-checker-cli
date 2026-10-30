@@ -1,0 +1,63 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "glossary-checker-cli"
+version = "0.1.0"
+description = "Enforce unified project terminology defined in a glossary configuration."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = [
+    "pathspec>=0.12.1",
+]
+
+[project.scripts]
+glossary = "glossary_checker_cli.cli:main"
+
+[dependency-groups]
+dev = [
+    "archcheck",
+    "pytest>=8.0.0",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.8.0",
+    "symbol-checker-cli",
+]
+
+[tool.uv.sources]
+archcheck = { path = "../architecture-checker-cli", editable = true }
+symbol-checker-cli = { path = "../symbol-checker-cli", editable = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["--strict-markers", "--cov=glossary_checker_cli", "--cov-report=term-missing"]
+markers = [
+    "integration: repository-wide or end-to-end checks outside isolated unit tests",
+]
+
+[tool.coverage.run]
+source = ["glossary_checker_cli"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+exclude_also = [
+    "if __name__ == .__main__.:",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "C90"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = true
+

@@ -1,0 +1,44 @@
+[settings]
+paths = ["."]
+exclude = [".git/", "arch.toml", "glossary.toml", "symbols.toml", "uv.lock"]
+similarity_threshold = 0.65
+
+[[terms]]
+term = "glossary"
+definition = "The configured collection of canonical terms and their definitions for a project."
+forbidden_terms = ["dictionary", "vocabulary", "lexicon", "wordbook"]
+
+[[terms]]
+term = "term"
+definition = "An approved word or phrase defined in the glossary."
+forbidden_terms = ["keyword", "buzzword", "headword"]
+
+[[terms]]
+term = "definition"
+definition = "The unambiguous explanation of what a canonical term means."
+forbidden_terms = ["meaning_text", "gloss"]
+
+[[terms]]
+term = "forbidden_term"
+definition = "A disallowed synonym that must be replaced by its canonical term."
+forbidden_terms = ["banned_word", "blacklist_word", "disallowed_word", "rejected_synonym"]
+
+[[terms]]
+term = "finding"
+definition = "A detected problem reported by the checker during validation or file checking."
+forbidden_terms = ["violation", "offense", "infringement"]
+
+[[terms]]
+term = "checker"
+definition = "The tool that validates the glossary and inspects target_files for findings."
+forbidden_terms = ["linter", "scanner", "inspector", "analyzer"]
+
+[[terms]]
+term = "target_file"
+definition = "A text or source code file inspected by the checker."
+forbidden_terms = ["input_file", "scanned_file", "checked_document"]
+
+[[terms]]
+term = "suggestion"
+definition = "Actionable advice emitted with a finding to guide an agent or user."
+forbidden_terms = ["fix_hint", "remediation", "recommendation"]
