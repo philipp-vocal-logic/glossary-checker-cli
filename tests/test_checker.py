@@ -266,3 +266,23 @@ def test_check_resolves_explicit_targets_from_cwd_and_base_dir(
     assert [finding.file for finding in check(glossary, targets=[Path("only_in_base.py")])] == [
         Path("only_in_base.py")
     ]
+
+
+def test_check_text_preserves_line_numbers_across_form_feed_and_unicode_separators() -> None:
+    sample = "header = 'page\x0cbreak\u2028here'\r\nclient_id = 1\n"
+    findings = check_text(sample, _sample_glossary(), file=Path("sample.py"))
+    assert [(finding.line, finding.column) for finding in findings] == [(2, 1)]
+
+
+def test_check_handles_non_utf8_gitignore_and_git_exclude(tmp_path: Path) -> None:
+    (tmp_path / ".gitignore").write_bytes(b"# \xff\xfe comment\nignored.py\n")
+    (tmp_path / "ignored.py").write_text("client = 1\n", encoding="utf-8")
+    git_meta_dir = tmp_path / ".git" / "info"
+    git_meta_dir.mkdir(parents=True)
+    (git_meta_dir / "exclude").write_bytes(b"# \xff\xfe comment\nlocal_ignore.py\n")
+    (tmp_path / "local_ignore.py").write_text("client = 2\n", encoding="utf-8")
+
+    glossary = _sample_glossary(source_path=tmp_path / "glossary.toml")
+    findings = check(glossary)
+    assert [finding.file for finding in findings] == [Path(".gitignore")]
+    assert "Failed to read UTF-8 target_file" in findings[0].message

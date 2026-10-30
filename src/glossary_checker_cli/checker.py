@@ -72,8 +72,8 @@ def _check_text_with_index(
         return []
 
     findings: list[Finding] = []
-    for line_number, line in enumerate(text.splitlines(), start=1):
-        active_line, ignored_norms = _extract_active_line(line)
+    for line_number, raw_line in enumerate(text.split("\n"), start=1):
+        active_line, ignored_norms = _extract_active_line(raw_line.removesuffix("\r"))
         if ignored_norms is None:
             continue
         spans = _extract_line_subwords(active_line)
@@ -165,7 +165,8 @@ def _build_ignore_matcher(
     patterns: list[str] = [".git/", f"/{source_path.name}"]
     for ignore_file in (base_dir / ".gitignore", base_dir / ".git" / "info" / "exclude"):
         if ignore_file.is_file():
-            patterns.extend(ignore_file.read_text(encoding="utf-8").splitlines())
+            content = ignore_file.read_text(encoding="utf-8", errors="replace")
+            patterns.extend(content.splitlines())
     patterns.extend(exclude)
     return pathspec.PathSpec.from_lines("gitignore", patterns)
 

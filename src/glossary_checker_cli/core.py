@@ -13,6 +13,7 @@ SUBWORD_PATTERN = re.compile(
     rf"|{_UPPER}+(?={_UPPER}{_LOWER}|\d|_|\b)"
     rf"|{_UPPER}?{_LOWER}+|[^\W\d_]+|\d+"
 )
+TERM_HEADER_PATTERN = re.compile(r"^[ \t]*\[\[[ \t]*['\"]?terms['\"]?[ \t]*\]\][ \t]*(?:#.*)?$")
 INVARIANT_SINGULARS = frozenset(
     {"alias", "atlas", "bias", "bus", "canvas", "chaos", "corpus", "lens", "news", "series"}
     | {"species", "status", "virus"}
@@ -164,6 +165,15 @@ def _load_term(raw_entry: object, line: int = 1) -> Term:
     )
 
 
+def _extract_term_lines(content: str, count: int) -> list[int]:
+    lines = [
+        index
+        for index, line in enumerate(content.split("\n"), start=1)
+        if TERM_HEADER_PATTERN.match(line)
+    ]
+    return lines if len(lines) == count else [1] * count
+
+
 def load_glossary(path: Path) -> Glossary:
     """Load a glossary configuration from a TOML file."""
     content = path.read_text(encoding="utf-8")
@@ -175,14 +185,9 @@ def load_glossary(path: Path) -> Glossary:
         raise ValueError("Invalid 'settings' or 'terms' section in glossary configuration.")
     _reject_unknown_keys(settings, {"paths", "exclude", "similarity_threshold"}, "'settings'")
 
-    term_lines = [
-        index
-        for index, line in enumerate(content.splitlines(), start=1)
-        if line.lstrip().startswith("[[terms]]")
-    ]
-    padded_lines = [*term_lines, *([1] * len(raw_terms))]
+    term_lines = _extract_term_lines(content, len(raw_terms))
     terms = tuple(
-        _load_term(raw_entry, line=padded_lines[index]) for index, raw_entry in enumerate(raw_terms)
+        _load_term(raw_entry, line=term_lines[index]) for index, raw_entry in enumerate(raw_terms)
     )
     raw_paths = _require_str_tuple(settings.get("paths", ["."]), "paths")
     if not raw_paths or any(not raw_path for raw_path in raw_paths):

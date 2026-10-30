@@ -240,6 +240,25 @@ def test_load_glossary_parses_toml_and_records_term_lines(tmp_path: Path) -> Non
     assert [finding.line for finding in findings] == [6]
 
 
+def test_load_glossary_handles_spaced_headers_and_inline_terms(tmp_path: Path) -> None:
+    spaced = tmp_path / "spaced.toml"
+    spaced.write_text(
+        '[[ terms ]] # first entry\nterm = "customer"\ndefinition = "line\u2028four\u2029still"\n\n'
+        '[[terms]]\nterm = "invoice"\ndefinition = ""\n',
+        encoding="utf-8",
+    )
+    loaded_spaced = load_glossary(spaced)
+    assert [entry.line for entry in loaded_spaced.terms] == [1, 5]
+
+    inline = tmp_path / "inline.toml"
+    inline.write_text(
+        'terms = [\n  { term = "customer", definition = "" },\n]\n',
+        encoding="utf-8",
+    )
+    loaded_inline = load_glossary(inline)
+    assert [entry.line for entry in loaded_inline.terms] == [1]
+
+
 @pytest.mark.parametrize(
     ("raw_toml", "expected_message"),
     [
