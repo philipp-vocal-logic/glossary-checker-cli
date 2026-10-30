@@ -147,9 +147,10 @@ def test_check_text_respects_inline_ignore_comments() -> None:
         "client_id = 1  # glossary: ignore\n"
         "record = fetch_client(buyer_profile)  # glossary: ignore[client]\n"
         "active = client_id  # glossary: ignore[buyer_profile]\n"
+        'note = "see glossary: ignore"; client_id = 2\n'
     )
     findings = check_text(sample, _sample_glossary(), file=Path("sample.py"))
-    assert [(finding.line, finding.column) for finding in findings] == [(2, 23), (3, 10)]
+    assert [(finding.line, finding.column) for finding in findings] == [(2, 23), (3, 10), (4, 32)]
 
 
 def test_check_text_handles_unicode_identifiers_and_terms() -> None:
@@ -193,11 +194,34 @@ def test_check_reports_missing_explicit_target_path(tmp_path: Path) -> None:
 def test_check_handles_configured_paths_outside_base_dir(tmp_path: Path) -> None:
     sub_dir = tmp_path / "sub"
     sub_dir.mkdir()
-    (tmp_path / "outside.py").write_text("client_id = 1\n", encoding="utf-8")
+    outside_dir = tmp_path / "outside"
+    outside_dir.mkdir()
+    (outside_dir / "file.py").write_text("client_id = 1\n", encoding="utf-8")
 
     glossary = _sample_glossary(
         source_path=sub_dir / "glossary.toml",
-        paths=(Path("../outside.py"),),
+        paths=(Path("../outside"),),
     )
     findings = check(glossary)
-    assert [finding.file for finding in findings] == [Path("../outside.py")]
+    assert [finding.file for finding in findings] == [Path("../outside/file.py")]
+
+
+def test_check_resolves_explicit_targets_from_cwd_and_base_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base_dir = tmp_path / "root"
+    sub_dir = base_dir / "sub"
+    sub_dir.mkdir(parents=True)
+    (base_dir / "app.py").write_text("client_id = 1\n", encoding="utf-8")
+    (sub_dir / "app.py").write_text("customer_id = 1\n", encoding="utf-8")
+    (base_dir / "only_in_base.py").write_text("client_id = 2\n", encoding="utf-8")
+
+    glossary = _sample_glossary(
+        source_path=base_dir / "glossary.toml",
+        exclude=("only_in_base.py",),
+    )
+    monkeypatch.chdir(sub_dir)
+    assert check(glossary, targets=[Path("app.py")]) == []
+    assert [finding.file for finding in check(glossary, targets=[Path("only_in_base.py")])] == [
+        Path("only_in_base.py")
+    ]

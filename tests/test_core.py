@@ -17,22 +17,30 @@ from glossary_checker_cli.core import (
 @pytest.mark.parametrize(
     ("word", "expected"),
     [
-        pytest.param("clients", "client", id="regular_plural_s"),
-        pytest.param("categories", "category", id="ies_to_y"),
-        pytest.param("pies", "pie", id="short_ies_strips_s_only"),
-        pytest.param("boxes", "box", id="xes_to_x"),
-        pytest.param("classes", "class", id="sses_to_ss"),
-        pytest.param("matches", "match", id="ches_to_ch"),
-        pytest.param("dishes", "dish", id="shes_to_sh"),
-        pytest.param("buzzes", "buzz", id="zes_to_z"),
-        pytest.param("status", "status", id="us_ending_unchanged"),
-        pytest.param("analysis", "analysis", id="is_ending_unchanged"),
-        pytest.param("class", "class", id="ss_ending_unchanged"),
-        pytest.param("bus", "bus", id="three_letter_word_unchanged"),
-        pytest.param("lens", "lens", id="invariant_singular_unchanged"),
-        pytest.param("lenses", "lens", id="invariant_plural_es_stripped"),
-        pytest.param("alias", "alias", id="alias_singular_unchanged"),
-        pytest.param("aliases", "alias", id="aliases_plural_to_alias"),
+        ("clients", "client"),
+        ("categories", "category"),
+        ("pies", "pie"),
+        ("cookies", "cookie"),
+        ("movies", "movie"),
+        ("boxes", "box"),
+        ("classes", "class"),
+        ("matches", "match"),
+        ("dishes", "dish"),
+        ("buzzes", "buzz"),
+        ("status", "status"),
+        ("statuses", "status"),
+        ("analysis", "analysis"),
+        ("analyses", "analysis"),
+        ("indices", "index"),
+        ("axes", "axis"),
+        ("children", "child"),
+        ("class", "class"),
+        ("bus", "bus"),
+        ("buses", "bus"),
+        ("lens", "lens"),
+        ("lenses", "lens"),
+        ("alias", "alias"),
+        ("aliases", "alias"),
     ],
 )
 def test_singularize(word: str, expected: str) -> None:
@@ -90,24 +98,15 @@ def test_glossary_forbidden_rules_skips_empty_entries() -> None:
 def test_validate_glossary_accepts_valid_glossary() -> None:
     glossary = Glossary(
         terms=(
-            Term(
-                term="customer",
-                definition="An entity that purchases goods from the platform.",
-                forbidden_terms=("client",),
-            ),
-            Term(
-                term="invoice",
-                definition="A billing statement issued after checkout.",
-            ),
+            Term("customer", "An entity that purchases goods from the platform.", ("client",)),
+            Term("invoice", "A billing statement issued after checkout."),
         )
     )
     assert validate_glossary(glossary) == []
 
 
 def test_validate_glossary_detects_empty_term() -> None:
-    glossary = Glossary(
-        terms=(Term(term="   ", definition="A blank term entry."),),
-    )
+    glossary = Glossary(terms=(Term("   ", "A blank term entry."),))
     assert validate_glossary(glossary) == [
         Finding(
             file=Path("glossary.toml"),
@@ -118,9 +117,7 @@ def test_validate_glossary_detects_empty_term() -> None:
 
 
 def test_validate_glossary_detects_empty_definition() -> None:
-    glossary = Glossary(
-        terms=(Term(term="customer", definition=""),),
-    )
+    glossary = Glossary(terms=(Term("customer", ""),))
     assert validate_glossary(glossary) == [
         Finding(
             file=Path("glossary.toml"),
@@ -133,8 +130,8 @@ def test_validate_glossary_detects_empty_definition() -> None:
 def test_validate_glossary_detects_duplicate_canonical_term() -> None:
     glossary = Glossary(
         terms=(
-            Term(term="customer", definition="First definition of customer."),
-            Term(term="customers", definition="Unrelated second entry."),
+            Term("customer", "First definition of customer."),
+            Term("customers", "Unrelated second entry."),
         )
     )
     assert validate_glossary(glossary) == [
@@ -149,42 +146,21 @@ def test_validate_glossary_detects_duplicate_canonical_term() -> None:
 def test_validate_glossary_detects_term_and_forbidden_collision() -> None:
     glossary = Glossary(
         terms=(
-            Term(
-                term="customer",
-                definition="An entity that purchases goods from the platform.",
-                forbidden_terms=("buyer",),
-            ),
-            Term(
-                term="buyer",
-                definition="A person executing a purchase order.",
-            ),
+            Term("customer_account", "A billing record for a customer.", ("buyer", "account")),
+            Term("buyer", "A person executing a purchase order."),
         )
     )
-    assert validate_glossary(glossary) == [
-        Finding(
-            file=Path("glossary.toml"),
-            message="Term 'buyer' collides with forbidden_term 'buyer' in 'customer'.",
-            suggestion=(
-                "Remove 'buyer' from forbidden_terms of 'customer' "
-                "or merge 'buyer' into 'customer'."
-            ),
-        )
+    assert [finding.message for finding in validate_glossary(glossary)] == [
+        "Term 'buyer' collides with forbidden_term 'buyer' in 'customer_account'.",
+        "Term 'customer_account' collides with forbidden_term 'account' in 'customer_account'.",
     ]
 
 
 def test_validate_glossary_detects_shared_forbidden_term() -> None:
     glossary = Glossary(
         terms=(
-            Term(
-                term="customer",
-                definition="An entity that purchases goods from the platform.",
-                forbidden_terms=("client",),
-            ),
-            Term(
-                term="merchant",
-                definition="A business offering products in the storefront.",
-                forbidden_terms=("client",),
-            ),
+            Term("customer", "An entity that purchases goods from the platform.", ("client",)),
+            Term("merchant", "A business offering products in the storefront.", ("client",)),
         )
     )
     assert validate_glossary(glossary) == [
@@ -202,33 +178,23 @@ def test_validate_glossary_detects_shared_forbidden_term() -> None:
 def test_validate_glossary_detects_overlapping_definitions() -> None:
     glossary = Glossary(
         terms=(
-            Term(
-                term="customer",
-                definition="A registered person who buys items from the online store.",
-            ),
-            Term(
-                term="shopper",
-                definition="A registered person who buys products from the online store.",
-            ),
+            Term("customer", "A registered person who buys items from the online store."),
+            Term("shopper", "A registered person who buys products from the online store."),
+            Term("courier", "A registered person who delivers parcels from the local depot."),
         ),
         similarity_threshold=0.65,
     )
     findings = validate_glossary(glossary)
-    assert len(findings) == 1 and "overlapping definitions" in findings[0].message
+    assert [finding.message for finding in findings] == [
+        "Terms 'customer' and 'shopper' have overlapping definitions (similarity: 0.71)."
+    ]
 
 
 def test_validate_glossary_detects_forbidden_term_inside_definition() -> None:
     glossary = Glossary(
         terms=(
-            Term(
-                term="customer",
-                definition="An entity that purchases goods from the platform.",
-                forbidden_terms=("client",),
-            ),
-            Term(
-                term="invoice",
-                definition="A billing statement sent to a client after checkout.",
-            ),
+            Term("customer", "An entity that purchases goods from the platform.", ("client",)),
+            Term("invoice", "A billing statement sent to a client after checkout."),
         )
     )
     assert validate_glossary(glossary) == [
@@ -268,6 +234,9 @@ def test_load_glossary_parses_toml(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("raw_toml", "expected_message"),
     [
+        ("unknown = 1\n", "Unknown key"),
+        ("[settings]\nexlude = []\n", "Unknown key"),
+        ('[[terms]]\nterm = "a"\nforbidden_term = []\n', "Unknown key"),
         ('settings = "bad"\n', "Invalid 'settings'"),
         ('terms = ["bad"]\n', "must be a table"),
         ("[[terms]]\nterm = 5\n", "Expected string for 'term'"),

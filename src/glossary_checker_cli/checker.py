@@ -19,7 +19,9 @@ from glossary_checker_cli.core import (
 )
 
 TOKEN_PATTERN = re.compile(r"\w+(?:-\w+)*")
-IGNORE_PATTERN = re.compile(r"glossary:\s*ignore(?:\[([^\]]*)\])?")
+IGNORE_PATTERN = re.compile(
+    r"(?:#|//|--|/\*|<!--)\s*glossary:\s*ignore(?:\[([^\]]*)\])?\s*(?:\*/|-->)?\s*$"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,20 +37,12 @@ def check(glossary: Glossary, targets: Sequence[Path] | None = None) -> list[Fin
     """Validate the glossary and inspect all configured target_files for findings."""
     findings = validate_glossary(glossary)
     base_dir = glossary.source_path.parent.resolve()
-    for target in targets or ():
-        if not _resolve_target(base_dir, target).exists():
-            findings.append(
-                Finding(
-                    file=target,
-                    message=f"Target path '{target}' does not exist.",
-                    suggestion="Provide an existing target_file or directory path.",
-                )
-            )
+    roots, target_findings = _resolve_search_roots(base_dir, glossary.paths, targets)
+    findings.extend(target_findings)
 
     ignore_matcher = _build_ignore_matcher(base_dir, glossary.exclude, glossary.source_path)
     rules = glossary.forbidden_rules()
-    discovered = _discover_target_files(base_dir, glossary.paths, ignore_matcher)
-    for target_file in _filter_targets(discovered, base_dir, targets):
+    for target_file in _discover_target_files(base_dir, roots, ignore_matcher):
         content = _read_text_file(target_file)
         if content is not None:
             display_path = (
@@ -164,10 +158,11 @@ def _matches_window(
 def _build_ignore_matcher(
     base_dir: Path, exclude: tuple[str, ...], source_path: Path
 ) -> pathspec.PathSpec:
-    patterns: list[str] = [".git/"]
     resolved_source = source_path.resolve()
-    if resolved_source.is_relative_to(base_dir):
-        patterns.append(f"/{resolved_source.relative_to(base_dir).as_posix()}")
+    patterns: list[str] = [
+        ".git/",
+        f"/{resolved_source.relative_to(base_dir).as_posix()}",
+    ]
     gitignore_path = base_dir / ".gitignore"
     if gitignore_path.is_file():
         patterns.extend(gitignore_path.read_text(encoding="utf-8").splitlines())
@@ -175,22 +170,41 @@ def _build_ignore_matcher(
     return pathspec.PathSpec.from_lines("gitignore", patterns)
 
 
+def _resolve_search_roots(
+    base_dir: Path, configured_paths: tuple[Path, ...], targets: Sequence[Path] | None
+) -> tuple[list[Path], list[Finding]]:
+    if targets is None:
+        roots = [
+            resolved
+            for rel_path in configured_paths
+            if (resolved := (base_dir / rel_path).resolve()).exists()
+        ]
+        return roots, []
+
+    roots: list[Path] = []
+    findings: list[Finding] = []
+    for target in targets:
+        resolved = _resolve_target(base_dir, target)
+        if resolved.exists():
+            roots.append(resolved)
+        else:
+            findings.append(
+                Finding(
+                    file=target,
+                    message=f"Target path '{target}' does not exist.",
+                    suggestion="Provide an existing target_file or directory path.",
+                )
+            )
+    return roots, findings
+
+
 def _discover_target_files(
-    base_dir: Path, configured_paths: tuple[Path, ...], ignore_matcher: pathspec.PathSpec
+    base_dir: Path, roots: Sequence[Path], ignore_matcher: pathspec.PathSpec
 ) -> list[Path]:
     discovered: list[Path] = []
-    seen: set[Path] = set()
-
-    for rel_path in configured_paths:
-        target = (base_dir / rel_path).resolve()
-        if not target.exists():
-            continue
+    for target in roots:
         if target.is_file():
-            if target not in seen and not _is_ignored(
-                target, base_dir, ignore_matcher, is_dir=False
-            ):
-                seen.add(target)
-                discovered.append(target)
+            discovered.append(target)
             continue
 
         for root_str, dirnames, filenames in os.walk(target):
@@ -202,19 +216,16 @@ def _discover_target_files(
             )
             for filename in sorted(filenames):
                 file_path = root_path / filename
-                if file_path not in seen and not _is_ignored(
-                    file_path, base_dir, ignore_matcher, is_dir=False
-                ):
-                    seen.add(file_path)
+                if not _is_ignored(file_path, base_dir, ignore_matcher, is_dir=False):
                     discovered.append(file_path)
 
-    return discovered
+    return list(dict.fromkeys(discovered))
 
 
 def _is_ignored(
     path: Path, base_dir: Path, ignore_matcher: pathspec.PathSpec, *, is_dir: bool
 ) -> bool:
-    if not path.is_relative_to(base_dir) or path == base_dir:
+    if not path.is_relative_to(base_dir):
         return False
     rel_posix = path.relative_to(base_dir).as_posix()
     return ignore_matcher.match_file(rel_posix) or (
@@ -223,21 +234,10 @@ def _is_ignored(
 
 
 def _resolve_target(base_dir: Path, target: Path) -> Path:
+    if target.exists():
+        return target.resolve()
     joined = base_dir / target
     return joined.resolve() if joined.exists() else target.resolve()
-
-
-def _filter_targets(
-    discovered: list[Path], base_dir: Path, targets: Sequence[Path] | None
-) -> list[Path]:
-    if not targets:
-        return discovered
-    resolved = tuple(_resolve_target(base_dir, target) for target in targets)
-    return [
-        path
-        for path in discovered
-        if any(path == target or target in path.parents for target in resolved)
-    ]
 
 
 def _read_text_file(path: Path) -> str | None:

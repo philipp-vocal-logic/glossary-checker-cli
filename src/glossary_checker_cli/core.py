@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 import tomllib
 from dataclasses import dataclass
-from difflib import SequenceMatcher
 from pathlib import Path
 
 _UPPER = r"[A-ZÀ-ÖØ-Þ]"
@@ -16,6 +15,22 @@ SUBWORD_PATTERN = re.compile(
 INVARIANT_SINGULARS = frozenset(
     {"alias", "atlas", "bias", "canvas", "chaos", "corpus", "lens", "news", "series", "species"}
 )
+IRREGULAR_PLURALS = {
+    "analyses": "analysis",
+    "axes": "axis",
+    "buses": "bus",
+    "children": "child",
+    "cookies": "cookie",
+    "crises": "crisis",
+    "indices": "index",
+    "matrices": "matrix",
+    "movies": "movie",
+    "people": "person",
+    "statuses": "status",
+    "theses": "thesis",
+    "vertices": "vertex",
+}
+_STOPWORDS = {"a", "an", "by", "for", "from", "in", "of", "on", "that", "the", "to", "who"}
 
 
 def split_subwords(text: str) -> tuple[str, ...]:
@@ -25,6 +40,8 @@ def split_subwords(text: str) -> tuple[str, ...]:
 
 def singularize(word: str) -> str:
     """Normalize a lowercase English sub-word to its singular form."""
+    if irregular := IRREGULAR_PLURALS.get(word):
+        return irregular
     if len(word) <= 3 or word in INVARIANT_SINGULARS:
         return word
     if word.endswith("es") and word[:-2] in INVARIANT_SINGULARS:
@@ -100,9 +117,15 @@ def _require_str_tuple(raw_field: object, field_name: str) -> tuple[str, ...]:
     return tuple(part.strip() for part in raw_field)
 
 
+def _reject_unknown_keys(mapping: dict[str, object], allowed: set[str], section: str) -> None:
+    if unknown := sorted(set(mapping) - allowed):
+        raise ValueError(f"Unknown key(s) in {section}: {', '.join(unknown)}.")
+
+
 def _load_term(raw_entry: object) -> Term:
     if not isinstance(raw_entry, dict):
         raise ValueError("Each entry in 'terms' must be a table.")
+    _reject_unknown_keys(raw_entry, {"term", "definition", "forbidden_terms"}, "'terms' entry")
     return Term(
         term=_require_str(raw_entry.get("term", ""), "term"),
         definition=_require_str(raw_entry.get("definition", ""), "definition"),
@@ -113,10 +136,12 @@ def _load_term(raw_entry: object) -> Term:
 def load_glossary(path: Path) -> Glossary:
     """Load a glossary configuration from a TOML file."""
     raw = tomllib.loads(path.read_text(encoding="utf-8"))
+    _reject_unknown_keys(raw, {"settings", "terms"}, "glossary configuration")
     settings = raw.get("settings", {})
     raw_terms = raw.get("terms", [])
     if not isinstance(settings, dict) or not isinstance(raw_terms, list):
         raise ValueError("Invalid 'settings' or 'terms' section in glossary configuration.")
+    _reject_unknown_keys(settings, {"paths", "exclude", "similarity_threshold"}, "'settings'")
 
     terms = tuple(_load_term(raw_entry) for raw_entry in raw_terms)
     paths = tuple(
@@ -137,6 +162,11 @@ def load_glossary(path: Path) -> Glossary:
         similarity_threshold=similarity_threshold,
         source_path=path,
     )
+
+
+def _contains_subwords(words: tuple[str, ...], target: tuple[str, ...]) -> bool:
+    length = len(target)
+    return any(words[index : index + length] == target for index in range(len(words) - length + 1))
 
 
 def validate_glossary(glossary: Glossary) -> list[Finding]:
@@ -183,21 +213,21 @@ def validate_glossary(glossary: Glossary) -> list[Finding]:
 
     forbidden_owner: dict[tuple[str, ...], tuple[str, Term]] = {}
     for norm_forbidden, forbidden, entry in glossary.forbidden_rules():
-        if norm_forbidden in canonical_by_norm:
-            colliding = canonical_by_norm[norm_forbidden]
-            findings.append(
-                Finding(
-                    file=source,
-                    message=(
-                        f"Term '{colliding.term}' collides with forbidden_term "
-                        f"'{forbidden}' in '{entry.term}'."
-                    ),
-                    suggestion=(
-                        f"Remove '{forbidden}' from forbidden_terms of '{entry.term}' "
-                        f"or merge '{colliding.term}' into '{entry.term}'."
-                    ),
+        for norm_canonical, colliding in canonical_by_norm.items():
+            if _contains_subwords(norm_canonical, norm_forbidden):
+                findings.append(
+                    Finding(
+                        file=source,
+                        message=(
+                            f"Term '{colliding.term}' collides with forbidden_term "
+                            f"'{forbidden}' in '{entry.term}'."
+                        ),
+                        suggestion=(
+                            f"Remove '{forbidden}' from forbidden_terms of '{entry.term}' "
+                            f"or merge '{colliding.term}' into '{entry.term}'."
+                        ),
+                    )
                 )
-            )
 
         if norm_forbidden in forbidden_owner:
             prev_raw, prev_entry = forbidden_owner[norm_forbidden]
@@ -222,60 +252,45 @@ def validate_glossary(glossary: Glossary) -> list[Finding]:
     return findings
 
 
+def _definition_words(definition: str) -> frozenset[str]:
+    return frozenset(word for word in normalize_subwords(definition) if word not in _STOPWORDS)
+
+
 def _check_definition_similarity(glossary: Glossary) -> list[Finding]:
-    findings: list[Finding] = []
-    source = glossary.source_path
     normalized_defs = [
-        (entry, " ".join(split_subwords(entry.definition)))
-        for entry in glossary.terms
-        if entry.definition
+        (entry, words) for entry in glossary.terms if (words := _definition_words(entry.definition))
     ]
-
-    for index, (entry_a, def_a) in enumerate(normalized_defs):
-        for entry_b, def_b in normalized_defs[index + 1 :]:
-            ratio = SequenceMatcher(None, def_a, def_b).ratio()
-            if ratio >= glossary.similarity_threshold:
-                findings.append(
-                    Finding(
-                        file=source,
-                        message=(
-                            f"Terms '{entry_a.term}' and '{entry_b.term}' have overlapping "
-                            f"definitions (similarity: {ratio:.2f})."
-                        ),
-                        suggestion=(
-                            f"Merge '{entry_b.term}' into forbidden_terms of '{entry_a.term}' "
-                            "or sharpen their definitions to distinguish their meanings."
-                        ),
-                    )
-                )
-
-    return findings
+    return [
+        Finding(
+            file=glossary.source_path,
+            message=(
+                f"Terms '{entry_a.term}' and '{entry_b.term}' have overlapping "
+                f"definitions (similarity: {ratio:.2f})."
+            ),
+            suggestion=(
+                f"Merge '{entry_b.term}' into forbidden_terms of '{entry_a.term}' "
+                "or sharpen their definitions to distinguish their meanings."
+            ),
+        )
+        for index, (entry_a, words_a) in enumerate(normalized_defs)
+        for entry_b, words_b in normalized_defs[index + 1 :]
+        if (ratio := len(words_a & words_b) / len(words_a | words_b))
+        >= glossary.similarity_threshold
+    ]
 
 
 def _check_definitions_for_forbidden_terms(
     glossary: Glossary,
     forbidden_owner: dict[tuple[str, ...], tuple[str, Term]],
 ) -> list[Finding]:
-    findings: list[Finding] = []
-    for entry in glossary.terms:
-        words = normalize_subwords(entry.definition)
-        for forbidden_words, (raw_forbidden, canonical_entry) in forbidden_owner.items():
-            length = len(forbidden_words)
-            if any(
-                words[index : index + length] == forbidden_words
-                for index in range(len(words) - length + 1)
-            ):
-                findings.append(
-                    Finding(
-                        file=glossary.source_path,
-                        message=(
-                            f"Definition of '{entry.term}' uses forbidden_term '{raw_forbidden}'."
-                        ),
-                        suggestion=(
-                            f"Use canonical term '{canonical_entry.term}' "
-                            f"({canonical_entry.definition})."
-                        ),
-                    )
-                )
-
-    return findings
+    return [
+        Finding(
+            file=glossary.source_path,
+            message=f"Definition of '{entry.term}' uses forbidden_term '{raw_forbidden}'.",
+            suggestion=f"Use canonical term '{canonical.term}' ({canonical.definition}).",
+        )
+        for entry in glossary.terms
+        if (words := normalize_subwords(entry.definition))
+        for forbidden_words, (raw_forbidden, canonical) in forbidden_owner.items()
+        if _contains_subwords(words, forbidden_words)
+    ]
