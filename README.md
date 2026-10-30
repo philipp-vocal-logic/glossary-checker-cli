@@ -50,6 +50,14 @@ http_session = httpx.Client()  # glossary: ignore[client]
 
 See [`glossary.toml`](glossary.toml) for this repository's canonical terms and definitions.
 
+Enable the repository's Git hooks (`.githooks/pre-commit` and `.githooks/commit-msg`):
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Run checks manually:
+
 ```bash
 uv run pytest
 uv run ruff check .
