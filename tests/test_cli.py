@@ -10,7 +10,6 @@ def test_main_returns_zero_when_no_findings(
 ) -> None:
     config = tmp_path / "glossary.toml"
     config.write_text(
-        '[settings]\nexclude = ["glossary.toml"]\n\n'
         '[[terms]]\nterm = "customer"\ndefinition = "Buyer of goods."\n'
         'forbidden_terms = ["client"]\n',
         encoding="utf-8",
@@ -21,12 +20,35 @@ def test_main_returns_zero_when_no_findings(
     assert exit_code == 0 and capsys.readouterr().out == ""
 
 
+def test_main_discovers_parent_glossary_from_subdirectory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = tmp_path / "glossary.toml"
+    config.write_text(
+        '[[terms]]\nterm = "customer"\ndefinition = "Buyer of goods."\n'
+        'forbidden_terms = ["client"]\n',
+        encoding="utf-8",
+    )
+    sub_dir = tmp_path / "src" / "pkg"
+    sub_dir.mkdir(parents=True)
+    (sub_dir / "clean.py").write_text("customer_id = 42\n", encoding="utf-8")
+
+    monkeypatch.chdir(sub_dir)
+    assert main([]) == 0 and capsys.readouterr().out == ""
+
+
+def test_main_returns_two_when_default_config_not_in_any_parent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    assert main([]) == 2 and "Failed to load glossary configuration" in capsys.readouterr().err
+
+
 def test_main_returns_one_and_prints_findings(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     config = tmp_path / "glossary.toml"
     config.write_text(
-        '[settings]\nexclude = ["glossary.toml"]\n\n'
         '[[terms]]\nterm = "customer"\ndefinition = "Buyer of goods."\n'
         'forbidden_terms = ["client"]\n',
         encoding="utf-8",
@@ -59,7 +81,6 @@ def test_main_filters_to_positional_target_files(
 ) -> None:
     config = tmp_path / "glossary.toml"
     config.write_text(
-        '[settings]\nexclude = ["glossary.toml"]\n\n'
         '[[terms]]\nterm = "customer"\ndefinition = "Buyer of goods."\n'
         'forbidden_terms = ["client"]\n',
         encoding="utf-8",

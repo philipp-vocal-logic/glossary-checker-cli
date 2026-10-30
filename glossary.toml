@@ -1,6 +1,6 @@
 [settings]
 paths = ["."]
-exclude = [".git/", "arch.toml", "glossary.toml", "symbols.toml", "uv.lock"]
+exclude = ["arch.toml", "symbols.toml", "uv.lock"]
 similarity_threshold = 0.65
 
 [[terms]]

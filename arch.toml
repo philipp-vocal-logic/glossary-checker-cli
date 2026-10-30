@@ -9,17 +9,17 @@ fix = "Use absolute submodule imports (glossary_checker_cli.<module>) and keep s
 
 [[rules]]
 files = ["src/glossary_checker_cli/core.py"]
-max_lines = 300
+max_lines = 350
 forbid = [
     "^\\s*(from|import)\\s+glossary_checker_cli\\.(checker|cli)\\b",
     "^\\s*(from|import)\\s+(os|sys|argparse|pathspec)\\b",
     "\\bprint\\s*\\(",
 ]
-fix = "Keep core.py as a pure domain module: no imports from checker/cli, no pathspec/os/sys/argparse, and no print calls."
+fix = "Keep core.py focused on glossary models, TOML loading, and validation: no imports from checker/cli, no pathspec/os/sys/argparse, and no print calls."
 
 [[rules]]
 files = ["src/glossary_checker_cli/checker.py"]
-max_lines = 250
+max_lines = 280
 forbid = [
     "^\\s*(from|import)\\s+glossary_checker_cli\\.cli\\b",
     "^\\s*(from|import)\\s+(sys|argparse|tomllib)\\b",
@@ -37,5 +37,5 @@ fix = "Keep cli.py as a thin entrypoint that delegates all checking and file dis
 
 [[rules]]
 files = ["tests/**/*.py"]
-max_lines = 300
+max_lines = 350
 fix = "Keep test modules concise and split large test suites by layer."

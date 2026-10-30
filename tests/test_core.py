@@ -29,6 +29,8 @@ from glossary_checker_cli.core import (
         ("buzzes", "buzz"),
         ("status", "status"),
         ("statuses", "status"),
+        ("virus", "virus"),
+        ("viruses", "virus"),
         ("analysis", "analysis"),
         ("analyses", "analysis"),
         ("indices", "index"),
@@ -41,6 +43,10 @@ from glossary_checker_cli.core import (
         ("lenses", "lens"),
         ("alias", "alias"),
         ("aliases", "alias"),
+        ("ids", "id"),
+        ("IDs", "id"),
+        ("OSs", "os"),
+        ("does", "do"),
     ],
 )
 def test_singularize(word: str, expected: str) -> None:
@@ -58,6 +64,7 @@ def test_singularize(word: str, expected: str) -> None:
         pytest.param("kebab-case-name", ("kebab", "case", "name"), id="kebab_case"),
         pytest.param("Plain prose words", ("plain", "prose", "words"), id="prose"),
         pytest.param("Kündigung_client", ("kündigung", "client"), id="unicode_subwords"),
+        pytest.param("słowoClient_клиент", ("słowo", "client", "клиент"), id="extended_unicode"),
         pytest.param("___", (), id="only_delimiters"),
     ],
 )
@@ -67,6 +74,7 @@ def test_split_subwords(text: str, expected: tuple[str, ...]) -> None:
 
 def test_normalize_subwords_splits_and_singularizes() -> None:
     assert normalize_subwords("clientProfiles") == ("client", "profile")
+    assert normalize_subwords("userIDs") == ("user", "id")
 
 
 def test_finding_format_returns_diagnostic_line() -> None:
@@ -156,22 +164,20 @@ def test_validate_glossary_detects_term_and_forbidden_collision() -> None:
     ]
 
 
-def test_validate_glossary_detects_shared_forbidden_term() -> None:
+def test_validate_glossary_detects_shared_and_overlapping_forbidden_terms() -> None:
     glossary = Glossary(
         terms=(
             Term("customer", "An entity that purchases goods from the platform.", ("client",)),
-            Term("merchant", "A business offering products in the storefront.", ("client",)),
-        )
-    )
-    assert validate_glossary(glossary) == [
-        Finding(
-            file=Path("glossary.toml"),
-            message="Forbidden term 'client' in 'merchant' collides with 'client' in 'customer'.",
-            suggestion=(
-                "Keep 'client' under only one canonical term so each "
-                "forbidden_term maps to a single canonical term."
+            Term(
+                "merchant",
+                "A business offering products in the storefront.",
+                ("client", "client_id"),
             ),
         )
+    )
+    assert [finding.message for finding in validate_glossary(glossary)] == [
+        "Forbidden term 'client' in 'merchant' collides with 'client' in 'customer'.",
+        "Forbidden term 'client_id' in 'merchant' collides with 'client' in 'customer'.",
     ]
 
 
@@ -208,19 +214,20 @@ def test_validate_glossary_detects_forbidden_term_inside_definition() -> None:
     ]
 
 
-def test_load_glossary_parses_toml(tmp_path: Path) -> None:
+def test_load_glossary_parses_toml_and_records_term_lines(tmp_path: Path) -> None:
     config = tmp_path / "glossary.toml"
     config.write_text(
         '[settings]\npaths = ["src"]\nexclude = ["build/"]\nsimilarity_threshold = 0.7\n\n'
-        '[[terms]]\nterm = "customer"\ndefinition = "Buyer of goods."\n'
+        '[[terms]]\nterm = "customer"\ndefinition = ""\n'
         'forbidden_terms = ["client"]\n',
         encoding="utf-8",
     )
-    assert load_glossary(config) == Glossary(
+    loaded = load_glossary(config)
+    assert loaded == Glossary(
         terms=(
             Term(
                 term="customer",
-                definition="Buyer of goods.",
+                definition="",
                 forbidden_terms=("client",),
             ),
         ),
@@ -229,6 +236,8 @@ def test_load_glossary_parses_toml(tmp_path: Path) -> None:
         similarity_threshold=0.7,
         source_path=config,
     )
+    findings = validate_glossary(loaded)
+    assert [finding.line for finding in findings] == [6]
 
 
 @pytest.mark.parametrize(
@@ -241,6 +250,8 @@ def test_load_glossary_parses_toml(tmp_path: Path) -> None:
         ('terms = ["bad"]\n', "must be a table"),
         ("[[terms]]\nterm = 5\n", "Expected string for 'term'"),
         ('[[terms]]\nterm = "a"\nforbidden_terms = "client"\n', "Expected list of strings"),
+        ("[settings]\npaths = []\n", "must contain at least one non-empty path"),
+        ('[settings]\npaths = ["  "]\n', "must contain at least one non-empty path"),
         ('[settings]\nsimilarity_threshold = "high"\n', "Expected number"),
         ("[settings]\nsimilarity_threshold = true\n", "Expected number"),
         ("[settings]\nsimilarity_threshold = 1.5\n", "must be between 0.0 and 1.0"),

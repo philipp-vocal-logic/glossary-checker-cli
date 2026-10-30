@@ -10,6 +10,16 @@ from glossary_checker_cli.checker import check
 from glossary_checker_cli.core import load_glossary
 
 
+def _resolve_config_path(config: Path) -> Path:
+    if config != Path("glossary.toml") or config.is_file():
+        return config
+    for parent in Path.cwd().resolve().parents:
+        candidate = parent / "glossary.toml"
+        if candidate.is_file():
+            return candidate
+    return config
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the glossary checker CLI."""
     parser = argparse.ArgumentParser(
@@ -29,11 +39,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Path to the glossary configuration file (default: glossary.toml).",
     )
     args = parser.parse_args(argv)
+    config_path = _resolve_config_path(args.config)
 
     try:
-        glossary = load_glossary(args.config)
+        glossary = load_glossary(config_path)
     except (OSError, tomllib.TOMLDecodeError, ValueError) as error:
-        print(f"{args.config}:1:1: Failed to load glossary configuration: {error}", file=sys.stderr)
+        print(f"{config_path}:1:1: Failed to load glossary configuration: {error}", file=sys.stderr)
         return 2
 
     findings = check(glossary, targets=tuple(args.files) or None)

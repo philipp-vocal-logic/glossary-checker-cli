@@ -10,7 +10,7 @@ def _sample_glossary(
     *,
     source_path: Path = Path("glossary.toml"),
     paths: tuple[Path, ...] = (Path("."),),
-    exclude: tuple[str, ...] = ("glossary.toml",),
+    exclude: tuple[str, ...] = (),
 ) -> Glossary:
     return Glossary(
         terms=(
@@ -104,26 +104,34 @@ def test_check_text_returns_empty_when_no_forbidden_rules() -> None:
     assert check_text("client = 1\n", glossary, file=Path("sample.py")) == []
 
 
-def test_check_excludes_paths_matched_by_gitignore(tmp_path: Path) -> None:
+def test_check_excludes_paths_matched_by_gitignore_and_git_exclude(tmp_path: Path) -> None:
     (tmp_path / ".gitignore").write_text("ignored_dir/\n", encoding="utf-8")
     (tmp_path / "ignored_dir").mkdir()
     (tmp_path / "ignored_dir" / "skip.py").write_text("client = 1\n", encoding="utf-8")
+    git_meta_dir = tmp_path / ".git" / "info"
+    git_meta_dir.mkdir(parents=True)
+    (git_meta_dir / "exclude").write_text("local_ignore.py\n", encoding="utf-8")
+    (tmp_path / "local_ignore.py").write_text("client = 2\n", encoding="utf-8")
 
     glossary = _sample_glossary(source_path=tmp_path / "glossary.toml")
     assert check(glossary) == []
 
 
-def test_check_excludes_paths_matched_by_config_exclude(tmp_path: Path) -> None:
-    (tmp_path / "skip.py").write_text("client = 1\n", encoding="utf-8")
+def test_check_excludes_paths_matched_by_config_exclude_even_when_explicit(tmp_path: Path) -> None:
+    skip_file = tmp_path / "skip.py"
+    skip_file.write_text("client = 1\n", encoding="utf-8")
 
     glossary = _sample_glossary(
         source_path=tmp_path / "glossary.toml",
         exclude=("skip.py",),
     )
     assert check(glossary) == []
+    assert check(glossary, targets=[skip_file]) == []
 
 
-def test_check_evaluates_explicit_target_file_path(tmp_path: Path) -> None:
+def test_check_evaluates_configured_file_path_and_reports_missing_configured_path(
+    tmp_path: Path,
+) -> None:
     target = tmp_path / "active.py"
     target.write_text("client_id = 42\n", encoding="utf-8")
 
@@ -131,15 +139,20 @@ def test_check_evaluates_explicit_target_file_path(tmp_path: Path) -> None:
         source_path=tmp_path / "glossary.toml",
         paths=(Path("active.py"), Path("missing.py")),
     )
-    assert [finding.file for finding in check(glossary)] == [Path("active.py")]
+    findings = check(glossary)
+    assert [finding.file for finding in findings] == [Path("active.py"), Path("missing.py")]
+    assert "does not exist" in findings[1].message
 
 
-def test_check_skips_binary_and_non_utf8_files(tmp_path: Path) -> None:
+def test_check_skips_binary_files_and_reports_non_utf8_files(tmp_path: Path) -> None:
     (tmp_path / "binary.bin").write_bytes(b"client\x00data")
     (tmp_path / "invalid.txt").write_bytes(b"\xff\xfeclient")
 
     glossary = _sample_glossary(source_path=tmp_path / "glossary.toml")
-    assert check(glossary) == []
+    findings = check(glossary)
+    assert len(findings) == 1
+    assert findings[0].file == Path("invalid.txt")
+    assert "Failed to read UTF-8 target_file" in findings[0].message
 
 
 def test_check_text_respects_inline_ignore_comments() -> None:
@@ -148,30 +161,39 @@ def test_check_text_respects_inline_ignore_comments() -> None:
         "record = fetch_client(buyer_profile)  # glossary: ignore[client]\n"
         "active = client_id  # glossary: ignore[buyer_profile]\n"
         'note = "see glossary: ignore"; client_id = 2\n'
+        "empty_brackets = client_id  # glossary: ignore[]\n"
     )
     findings = check_text(sample, _sample_glossary(), file=Path("sample.py"))
-    assert [(finding.line, finding.column) for finding in findings] == [(2, 23), (3, 10), (4, 32)]
+    assert [(finding.line, finding.column) for finding in findings] == [
+        (2, 23),
+        (3, 10),
+        (4, 32),
+        (5, 18),
+    ]
 
 
-def test_check_text_handles_unicode_identifiers_and_terms() -> None:
+def test_check_text_handles_unicode_and_plural_acronyms() -> None:
     glossary = Glossary(
         terms=(
             Term(
                 term="customer",
                 definition="Buyer of goods.",
-                forbidden_terms=("client", "Kunde"),
+                forbidden_terms=("client", "Kunde", "id"),
             ),
         ),
     )
-    sample = "entry = Kündigung_client\nkunde = 1\n"
+    sample = "entry = Kündigung_client\nkunde = 1\nrecords = userIDs\n"
     findings = check_text(sample, glossary, file=Path("sample.py"))
     assert [finding.message for finding in findings] == [
         "Forbidden term 'client' found in 'Kündigung_client'.",
         "Forbidden term 'Kunde' found in 'kunde'.",
+        "Forbidden term 'id' found in 'userIDs'.",
     ]
 
 
-def test_check_excludes_git_dir_and_config_file_by_default(tmp_path: Path) -> None:
+def test_check_excludes_git_dir_and_config_file_by_default_and_when_explicit(
+    tmp_path: Path,
+) -> None:
     config = tmp_path / "glossary.toml"
     config.write_text(
         '[[terms]]\nterm = "customer"\ndefinition = "Buyer."\nforbidden_terms = ["client"]\n',
@@ -179,10 +201,30 @@ def test_check_excludes_git_dir_and_config_file_by_default(tmp_path: Path) -> No
     )
     git_dir = tmp_path / ".git"
     git_dir.mkdir()
-    (git_dir / "COMMIT_EDITMSG").write_text("fix client issue\n", encoding="utf-8")
+    git_msg = git_dir / "COMMIT_EDITMSG"
+    git_msg.write_text("fix client issue\n", encoding="utf-8")
 
     glossary = _sample_glossary(source_path=config, exclude=())
     assert check(glossary) == []
+    assert check(glossary, targets=[config, git_msg]) == []
+
+
+def test_check_supports_symlinked_config_outside_base_dir(tmp_path: Path) -> None:
+    shared_dir = tmp_path / "shared"
+    shared_dir.mkdir()
+    real_config = shared_dir / "company_glossary.toml"
+    real_config.write_text(
+        '[[terms]]\nterm = "customer"\ndefinition = "Buyer."\nforbidden_terms = ["client"]\n',
+        encoding="utf-8",
+    )
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    symlink_config = repo_dir / "glossary.toml"
+    symlink_config.symlink_to(real_config)
+    (repo_dir / "app.py").write_text("client_id = 1\n", encoding="utf-8")
+
+    glossary = _sample_glossary(source_path=symlink_config)
+    assert [finding.file for finding in check(glossary)] == [Path("app.py")]
 
 
 def test_check_reports_missing_explicit_target_path(tmp_path: Path) -> None:
@@ -196,6 +238,8 @@ def test_check_handles_configured_paths_outside_base_dir(tmp_path: Path) -> None
     sub_dir.mkdir()
     outside_dir = tmp_path / "outside"
     outside_dir.mkdir()
+    (outside_dir / ".git").mkdir()
+    (outside_dir / ".git" / "config").write_text("client = 1\n", encoding="utf-8")
     (outside_dir / "file.py").write_text("client_id = 1\n", encoding="utf-8")
 
     glossary = _sample_glossary(
@@ -216,10 +260,7 @@ def test_check_resolves_explicit_targets_from_cwd_and_base_dir(
     (sub_dir / "app.py").write_text("customer_id = 1\n", encoding="utf-8")
     (base_dir / "only_in_base.py").write_text("client_id = 2\n", encoding="utf-8")
 
-    glossary = _sample_glossary(
-        source_path=base_dir / "glossary.toml",
-        exclude=("only_in_base.py",),
-    )
+    glossary = _sample_glossary(source_path=base_dir / "glossary.toml")
     monkeypatch.chdir(sub_dir)
     assert check(glossary, targets=[Path("app.py")]) == []
     assert [finding.file for finding in check(glossary, targets=[Path("only_in_base.py")])] == [

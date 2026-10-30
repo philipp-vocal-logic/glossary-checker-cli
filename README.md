@@ -32,13 +32,13 @@ forbidden_terms = ["client", "buyer_profile"]
 
 ### Settings
 
-- `paths` (default: `["."]`) — Target files or directories to check relative to the `glossary.toml` directory.
-- `exclude` (default: `[]`) — Additional gitignore-style patterns to skip. `.git/`, the active `glossary.toml`, `.gitignore` patterns, and binary files are excluded automatically.
+- `paths` (default: `["."]`) — Non-empty list of target files or directories to check relative to the `glossary.toml` directory. Non-existent configured paths are reported as findings.
+- `exclude` (default: `[]`) — Additional gitignore-style patterns to skip. `.git/`, the active `glossary.toml`, root `.gitignore` and `.git/info/exclude` patterns, and binary files (containing NUL bytes) are excluded automatically, including when target files are passed explicitly on the CLI. Non-binary files that cannot be decoded as UTF-8 are reported as findings.
 - `similarity_threshold` (default: `0.65`) — Minimum Jaccard similarity (`0.0` to `1.0`) between normalized non-stopword definitions before reporting overlapping terms.
 
 ### What Gets Checked
 
-1. **Glossary validation**: Reports empty terms or definitions, duplicate canonical terms, collisions between canonical terms and `forbidden_terms`, overlapping definitions (`>= similarity_threshold`), and definitions that use a `forbidden_term`.
+1. **Glossary validation**: Reports empty terms or definitions, duplicate canonical terms, subword collisions between canonical terms and `forbidden_terms` (or between `forbidden_terms` themselves), overlapping definitions (`>= similarity_threshold`), and definitions that use a `forbidden_term`.
 2. **Target file checking**: Splits identifiers and prose into normalized lowercase singular subwords across `snake_case`, `camelCase`, `PascalCase`, `kebab-case`, and acronyms. For example, forbidding `"client"` or `"buyer_profile"` matches `fetch_client`, `HTTPClients`, `buyerProfile`, and `"buyer profiles"`.
 
 ## Usage
