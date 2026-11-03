@@ -33,10 +33,15 @@ class _SubwordSpan:
     token_end: int
 
 
+def _resolve_base_dir(source_path: Path) -> Path:
+    parent = source_path.parent.resolve()
+    return parent.parent if parent.name == ".policy" else parent
+
+
 def check(glossary: Glossary, targets: Sequence[Path] | None = None) -> list[Finding]:
     """Validate the glossary and inspect all configured target_files for findings."""
     findings = validate_glossary(glossary)
-    base_dir = glossary.source_path.parent.resolve()
+    base_dir = _resolve_base_dir(glossary.source_path)
     roots, target_findings = _resolve_search_roots(base_dir, glossary.paths, targets)
     findings.extend(target_findings)
 
@@ -162,7 +167,9 @@ def _matches_window(
 def _build_ignore_matcher(
     base_dir: Path, exclude: tuple[str, ...], source_path: Path
 ) -> pathspec.PathSpec:
-    patterns: list[str] = [".git/", f"/{source_path.name}"]
+    parent = source_path.parent.resolve()
+    source_rel = f".policy/{source_path.name}" if parent != base_dir else source_path.name
+    patterns: list[str] = [".git/", f"/{source_rel}"]
     for ignore_file in (base_dir / ".gitignore", base_dir / ".git" / "info" / "exclude"):
         if ignore_file.is_file():
             content = ignore_file.read_text(encoding="utf-8", errors="replace")
